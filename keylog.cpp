@@ -170,6 +170,7 @@ extern BOOL mouseCapturing;
 extern BOOL mouseCapturingMod;
 extern BOOL keyAutoRepeat;
 extern BOOL mergeMouseActions;
+extern DWORD wheelMergeInterval;
 extern BOOL onlyCommandKeys;
 extern WCHAR comboChars[3];
 extern BOOL positioning;
@@ -386,6 +387,8 @@ LRESULT CALLBACK LLMouseProc(int nCode, WPARAM wp, LPARAM lp)
     int behavior = 1;
     static DWORD mouseButtonDown = 0;
     static DWORD lastClick = 0;
+    static DWORD lastWheelTime = 0;
+    static int lastWheelDirection = 0;
     BOOL holdButton = FALSE;
     if(positioning) {
         MSLLHOOKSTRUCT* ms = reinterpret_cast<MSLLHOOKSTRUCT*>(lp);
@@ -395,7 +398,15 @@ LRESULT CALLBACK LLMouseProc(int nCode, WPARAM wp, LPARAM lp)
 
         if (!(ms->flags & LLMHF_INJECTED)) {
             if(idx == 10) {
-                swprintf(c, 64, (int)(ms->mouseData) > 0 ? L"%sUp" : L"%sDown", mouseActions[idx]);
+                int direction = (int)(ms->mouseData) > 0 ? 1 : -1;
+                DWORD now = GetTickCount();
+                if(lastWheelDirection == direction && now - lastWheelTime < wheelMergeInterval) {
+                    lastWheelTime = now;
+                    return CallNextHookEx(moshook, nCode, wp, lp);
+                }
+                lastWheelTime = now;
+                lastWheelDirection = direction;
+                swprintf(c, 64, direction > 0 ? L"%sUp" : L"%sDown", mouseActions[idx]);
             } else if(mergeMouseActions) {
                 switch (idx) {
                     case 1:

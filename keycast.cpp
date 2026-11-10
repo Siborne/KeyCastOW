@@ -56,6 +56,8 @@ BOOL mouseCapturing = TRUE;
 BOOL mouseCapturingMod = FALSE;
 BOOL keyAutoRepeat = TRUE;
 BOOL mergeMouseActions = TRUE;
+DWORD wheelMergeInterval = 300;
+int uiLanguage = 0;
 int alignment = 1;
 BOOL onlyCommandKeys = FALSE;
 BOOL positioning = FALSE;
@@ -66,6 +68,21 @@ Color clearColor(0, 127, 127, 127);
 #define BRANDINGMAX 256
 WCHAR branding[BRANDINGMAX];
 WCHAR comboChars[4];
+enum UiTextId {
+    UI_MENU_SETTINGS, UI_MENU_RESTORE, UI_MENU_LANGUAGE, UI_MENU_EXIT,
+    UI_SAVE, UI_CANCEL, UI_KEYSTROKE_DELAY, UI_LINGER_TIME,
+    UI_FADE_DURATION, UI_MAX_LINES, UI_COMBO_CHARS,
+    UI_VISIBLE_MODIFIER, UI_SHIFT_MODIFIER,
+    UI_ONLY_COMMAND_KEYS, UI_HOLD_REPEAT, UI_WHEEL_MERGE,
+    UI_BG_COLOR, UI_BG_OPACITY, UI_TEXT_FONT,
+    UI_TEXT_COLOR, UI_TEXT_OPACITY, UI_BORDER_SIZE,
+    UI_BORDER_COLOR, UI_BORDER_OPACITY, UI_LABEL_SPACING,
+    UI_CORNER_SIZE, UI_MOUSE_ACTION, UI_MOUSE_MODIFIER,
+    UI_DETECT_CLICK, UI_ALIGNMENT, UI_ALIGN_LEFT, UI_ALIGN_RIGHT,
+    UI_POSITION, UI_DRAGGABLE_LABEL, UI_BRANDING, UI_TOGGLE_CAPTURING,
+    UI_CHOOSE_COLOR, UI_CHOOSE_FONT, UI_LANGUAGE,
+    LANG_TEXT_COUNT
+};
 POINT deskOrigin;
 
 #define MAXLABELS 60
@@ -93,6 +110,77 @@ Font * fontPlus = NULL;
 #define MENU_CONFIG    32
 #define MENU_EXIT      33
 #define MENU_RESTORE   34
+#define MENU_LANGUAGE  36
+
+LPCWSTR UiTextFor(int language, UiTextId id) {
+    static const WCHAR *texts[][LANG_TEXT_COUNT] = {
+        {
+            L"&Settings...", L"&Restore default settings", L"Language", L"&Exit",
+            L"Save", L"Cancel", L"Keystroke Delay(ms):", L"Linger Time(ms):",
+            L"Fade Duration(ms):", L"Maximum Lines:", L"Combination Chars:",
+            L"Display Standalone Modifier Key:", L"SHIFT as Modifier Key:",
+            L"Only Command Keys:", L"Hold Down to Repeat:", L"Wheel Merge(ms):",
+            L"Background Color:", L"Background Opacity(0-255):", L"Text Font:",
+            L"Text Color:", L"Text Opacity(0-255):", L"Border Size:",
+            L"Border Color:", L"Border Opacity(0-255):", L"Label Spacing:",
+            L"Corner Size:", L"Mouse Action:", L"Mouse Only With Modifier:",
+            L"Detect Click/DblClick:", L"Alignment:", L"Left", L"Right",
+            L"Position:", L"Draggable Label:", L"Branding:", L"Toggle Capturing",
+            L"Choose Color", L"Choose Font", L"Language:"
+        },
+        {
+            L"设置(&S)...", L"恢复默认设置(&R)", L"语言", L"退出(&E)",
+            L"保存", L"取消", L"按键延迟(ms):", L"停留时间(ms):",
+            L"淡出时长(ms):", L"最大行数:", L"组合键分隔符:",
+            L"显示单独修饰键:", L"SHIFT 作为修饰键:",
+            L"只显示命令键:", L"按住重复显示:", L"滚轮合并(ms):",
+            L"背景颜色:", L"背景透明度(0-255):", L"文字字体:",
+            L"文字颜色:", L"文字透明度(0-255):", L"边框大小:",
+            L"边框颜色:", L"边框透明度(0-255):", L"标签间距:",
+            L"圆角大小:", L"鼠标动作:", L"鼠标需配合修饰键:",
+            L"识别单击/双击:", L"对齐方式:", L"左", L"右",
+            L"位置:", L"可拖动标签:", L"品牌文字:", L"捕获开关",
+            L"选择颜色", L"选择字体", L"语言:"
+        }
+    };
+    return texts[language ? 1 : 0][id];
+}
+
+LPCWSTR UiText(UiTextId id) {
+    return UiTextFor(uiLanguage, id);
+}
+
+static BOOL CALLBACK LocalizeDialogChild(HWND hwndChild, LPARAM) {
+    WCHAR text[512];
+    if (GetWindowText(hwndChild, text, 512) == 0) {
+        return TRUE;
+    }
+    for (int i = 0; i < LANG_TEXT_COUNT; i++) {
+        if (wcscmp(text, UiTextFor(0, (UiTextId)i)) == 0 ||
+                wcscmp(text, UiTextFor(1, (UiTextId)i)) == 0) {
+            SetWindowText(hwndChild, UiText((UiTextId)i));
+            break;
+        }
+    }
+    return TRUE;
+}
+
+void ApplyUiLanguage(HWND hwndDlg = NULL) {
+    HWND dlg = hwndDlg ? hwndDlg : hDlgSettings;
+    if (!dlg) {
+        return;
+    }
+    EnumChildWindows(dlg, LocalizeDialogChild, 0);
+    HWND hAlign = GetDlgItem(dlg, IDC_ALIGNMENT);
+    int alignSel = ComboBox_GetCurSel(hAlign);
+    if (alignSel == CB_ERR) {
+        alignSel = alignment;
+    }
+    ComboBox_ResetContent(hAlign);
+    ComboBox_AddString(hAlign, UiText(UI_ALIGN_LEFT));
+    ComboBox_AddString(hAlign, UiText(UI_ALIGN_RIGHT));
+    ComboBox_SetCurSel(hAlign, alignSel);
+}
 
 void showText(LPCWSTR text, int behavior);
 
@@ -594,6 +682,8 @@ void saveSettings() {
     writeSettingInt(L"mouseCapturingMod", mouseCapturingMod);
     writeSettingInt(L"keyAutoRepeat", keyAutoRepeat);
     writeSettingInt(L"mergeMouseActions", mergeMouseActions);
+    writeSettingInt(L"wheelMergeInterval", wheelMergeInterval);
+    writeSettingInt(L"uiLanguage", uiLanguage);
     writeSettingInt(L"alignment", alignment);
     writeSettingInt(L"onlyCommandKeys", onlyCommandKeys);
     writeSettingInt(L"draggableLabel", draggableLabel);
@@ -645,6 +735,8 @@ void loadSettings() {
     mouseCapturingMod = GetPrivateProfileInt(L"KeyCastOW", L"mouseCapturingMod", 0, iniFile);
     keyAutoRepeat = GetPrivateProfileInt(L"KeyCastOW", L"keyAutoRepeat", 1, iniFile);
     mergeMouseActions = GetPrivateProfileInt(L"KeyCastOW", L"mergeMouseActions", 1, iniFile);
+    wheelMergeInterval = GetPrivateProfileInt(L"KeyCastOW", L"wheelMergeInterval", 300, iniFile);
+    uiLanguage = GetPrivateProfileInt(L"KeyCastOW", L"uiLanguage", 0, iniFile);
     alignment = GetPrivateProfileInt(L"KeyCastOW", L"alignment", 1, iniFile);
     onlyCommandKeys = GetPrivateProfileInt(L"KeyCastOW", L"onlyCommandKeys", 0, iniFile);
     draggableLabel = GetPrivateProfileInt(L"KeyCastOW", L"draggableLabel", 0, iniFile);
@@ -691,6 +783,8 @@ void renderSettingsData(HWND hwndDlg) {
     SetDlgItemText(hwndDlg, IDC_LABELSPACING, tmp);
     swprintf(tmp, 256, L"%d", maximumLines);
     SetDlgItemText(hwndDlg, IDC_MAXIMUMLINES, tmp);
+    swprintf(tmp, 256, L"%d", wheelMergeInterval);
+    SetDlgItemText(hwndDlg, IDC_WHEELMERGE, tmp);
     SetDlgItemText(hwndDlg, IDC_BRANDING, branding);
     SetDlgItemText(hwndDlg, IDC_COMBSCHEME, comboChars);
     CheckDlgButton(hwndDlg, IDC_VISIBLESHIFT, visibleShift ? BST_CHECKED : BST_UNCHECKED);
@@ -796,6 +890,7 @@ static void previewLabel() {
 BOOL CALLBACK SettingsWndProc(HWND hwndDlg, UINT msg, WPARAM wParam, LPARAM lParam)
 {
     WCHAR tmp[256];
+    int wheelMerge;
     switch (msg)
     {
         case WM_INITDIALOG:
@@ -808,8 +903,13 @@ BOOL CALLBACK SettingsWndProc(HWND hwndDlg, UINT msg, WPARAM wParam, LPARAM lPar
                 GetWindowRect(hwndDlg, &settingsDlgRect);
                 CreateToolTip(hwndDlg, IDC_COMBSCHEME, L"[+] to display combination keys like [Alt + Tab].");
                 HWND hCtrl = GetDlgItem(hwndDlg, IDC_ALIGNMENT);
-                ComboBox_InsertString(hCtrl, 0, L"Left");
-                ComboBox_InsertString(hCtrl, 1, L"Right");
+                ComboBox_InsertString(hCtrl, 0, UiText(UI_ALIGN_LEFT));
+                ComboBox_InsertString(hCtrl, 1, UiText(UI_ALIGN_RIGHT));
+                HWND hLang = GetDlgItem(hwndDlg, IDC_LANGUAGE);
+                ComboBox_InsertString(hLang, 0, L"English");
+                ComboBox_InsertString(hLang, 1, L"中文");
+                ComboBox_SetCurSel(hLang, uiLanguage);
+                ApplyUiLanguage(hwndDlg);
             }
             return TRUE;
         case WM_NOTIFY:
@@ -883,6 +983,16 @@ BOOL CALLBACK SettingsWndProc(HWND hwndDlg, UINT msg, WPARAM wParam, LPARAM lPar
                         positioning = TRUE;
                     }
                     return TRUE;
+                case IDC_LANGUAGE:
+                    if (HIWORD(wParam) == CBN_SELCHANGE) {
+                        int newLang = ComboBox_GetCurSel(GetDlgItem(hwndDlg, IDC_LANGUAGE));
+                        if (newLang != uiLanguage) {
+                            uiLanguage = newLang;
+                            ApplyUiLanguage(hwndDlg);
+                            saveSettings();
+                        }
+                    }
+                    return TRUE;
                 case IDOK:
                     labelSettings = previewLabelSettings;
                     GetDlgItemText(hwndDlg, IDC_LABELSPACING, tmp, 256);
@@ -897,6 +1007,14 @@ BOOL CALLBACK SettingsWndProc(HWND hwndDlg, UINT msg, WPARAM wParam, LPARAM lPar
                     } else if (maximumLines == 0) {
                         maximumLines = 1;
                     }
+                    GetDlgItemText(hwndDlg, IDC_WHEELMERGE, tmp, 256);
+                    wheelMerge = _wtoi(tmp);
+                    if (wheelMerge < 0) {
+                        wheelMerge = 0;
+                    } else if (wheelMerge > 2000) {
+                        wheelMerge = 2000;
+                    }
+                    wheelMergeInterval = wheelMerge;
                     GetDlgItemText(hwndDlg, IDC_BRANDING, branding, BRANDINGMAX);
                     GetDlgItemText(hwndDlg, IDC_COMBSCHEME, comboChars, 4);
                     visibleShift = (BST_CHECKED == IsDlgButtonChecked(hwndDlg, IDC_VISIBLESHIFT));
@@ -999,12 +1117,14 @@ LRESULT CALLBACK WindowFunc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
                 Shell_NotifyIcon( NIM_ADD, &nid );
 
                 hPopMenu = CreatePopupMenu();
-                AppendMenu( hPopMenu, MF_STRING, MENU_CONFIG,  L"&Settings..." );
-                AppendMenu( hPopMenu, MF_STRING, MENU_RESTORE,  L"&Restore default settings" );
+                AppendMenu( hPopMenu, MF_STRING, MENU_CONFIG,  UiText(UI_MENU_SETTINGS) );
+                AppendMenu( hPopMenu, MF_STRING, MENU_RESTORE,  UiText(UI_MENU_RESTORE) );
+                AppendMenu( hPopMenu, MF_STRING, MENU_LANGUAGE,
+                        uiLanguage ? L"&Language: 中文" : L"&Language: English" );
 #ifdef _DEBUG
                 AppendMenu( hPopMenu, MF_STRING, MENU_REPLAY,  L"Re&play" );
 #endif
-                AppendMenu( hPopMenu, MF_STRING, MENU_EXIT,    L"E&xit" );
+                AppendMenu( hPopMenu, MF_STRING, MENU_EXIT,    UiText(UI_MENU_EXIT) );
                 SetMenuDefaultItem( hPopMenu, MENU_CONFIG, FALSE );
             }
             break;
@@ -1043,6 +1163,16 @@ LRESULT CALLBACK WindowFunc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
                         updateCanvasSize(deskOrigin);
                         createCanvas();
                         prepareLabels();
+                        break;
+                    case MENU_LANGUAGE:
+                        uiLanguage = uiLanguage ? 0 : 1;
+                        ApplyUiLanguage(hDlgSettings);
+                        saveSettings();
+                        ModifyMenu(hPopMenu, MENU_CONFIG, MF_STRING, MENU_CONFIG, UiText(UI_MENU_SETTINGS));
+                        ModifyMenu(hPopMenu, MENU_RESTORE, MF_STRING, MENU_RESTORE, UiText(UI_MENU_RESTORE));
+                        ModifyMenu(hPopMenu, MENU_LANGUAGE, MF_STRING, MENU_LANGUAGE,
+                                uiLanguage ? L"&Language: 中文" : L"&Language: English");
+                        ModifyMenu(hPopMenu, MENU_EXIT, MF_STRING, MENU_EXIT, UiText(UI_MENU_EXIT));
                         break;
 #ifdef _DEBUG
                     case MENU_REPLAY:

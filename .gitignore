@@ -1,0 +1,13 @@
+.vs/
+Debug/
+Release/
+keycastow/
+*.user
+*.suo
+*.pdb
+*.ilk
+*.obj
+*.tlog
+*.idb
+*.ini
+*.VC.db
