@@ -11,6 +11,8 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
@@ -22,9 +24,29 @@ jobs:
       - name: Build Release Win32
         run: msbuild keycastow.vcxproj /p:Configuration=Release /p:Platform=Win32 /p:PlatformToolset=v143 /m /v:m
 
+      - name: Read product version
+        id: version
+        shell: pwsh
+        run: |
+          $version = (Get-Item Release/keycastow.exe).VersionInfo.ProductVersion
+          "version=$version" >> $env:GITHUB_OUTPUT
+
       - name: Upload executable
         uses: actions/upload-artifact@v4
         with:
           name: KeyCastOW-win32
           path: Release/keycastow.exe
           if-no-files-found: error
+
+      - name: Publish GitHub release
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: KeyCastOW v${{ steps.version.outputs.version }}
+          body: |
+            Automated Windows build of KeyCastOW.
+
+            Commit: ${{ github.sha }}
+          files: Release/keycastow.exe
+          overwrite_files: true
